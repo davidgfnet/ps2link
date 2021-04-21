@@ -56,6 +56,7 @@ pkoDebug(int cause, int badvaddr, int status, int epc, eeReg *regs)
 {
     int i;
     int code;
+    unsigned long stack_base;
     //    extern void printf(char *, ...);
     static void (* excpPrintf)(const char *, ...);
 
@@ -76,9 +77,9 @@ pkoDebug(int cause, int badvaddr, int status, int epc, eeReg *regs)
         init_scr();
         excpPrintf = scr_printf;
     }
-	else excpPrintf = (void*)printf;
+    else excpPrintf = (void*)printf;
 
-    excpPrintf("\n\n           EE Exception handler: %s exception\n\n", 
+    excpPrintf("\n\n           EE Exception handler: %s exception\n\n",
                codeTxt[code>>2]);
 
     excpPrintf("      Cause %08X  BadVAddr %08X  Status %08X  EPC %08X\n\n",
@@ -90,6 +91,20 @@ pkoDebug(int cause, int badvaddr, int status, int epc, eeReg *regs)
                    regName[i+16], regs[i+16].uint64[1], regs[i+16].uint64[0]);
     }
     excpPrintf("\n");
+
+    // Attempt to print the user stack, if SP is in some reasonable area
+    stack_base = regs[29].uint64[0];
+    stack_base &= ~3ULL;
+    for (i = 0; i < 32*10; i+= 32) {
+        unsigned long addr = stack_base + i;
+        unsigned int *ptr32 = (unsigned int*)addr;
+        if (addr >= 0 && (addr + 32) < 0x2000000) {
+            excpPrintf("%08x %08x %08x %08x %08x %08x %08x %08x\n",
+                       ptr32[0], ptr32[1], ptr32[2], ptr32[2],
+                       ptr32[4], ptr32[5], ptr32[6], ptr32[7]);
+        }
+    }
+
     SleepThread();
 }
 
@@ -120,30 +135,28 @@ void iopException(int cause, int badvaddr, int status, int epc, u32 *regs, int r
         init_scr();
         excpPrintf = scr_printf;
     }
-	else excpPrintf = (void*)printf;
+    else excpPrintf = (void*)printf;
    
-	excpPrintf("\n\n         IOP Exception handler: %s exception\n\n", 
+    excpPrintf("\n\n         IOP Exception handler: %s exception\n\n", 
                codeTxt[code>>2]);
-		
-	excpPrintf("               Module Name \"%s\" Relative EPC %08X\n\n",
+
+    excpPrintf("               Module Name \"%s\" Relative EPC %08X\n\n",
                name, repc);
 
 
-	excpPrintf("      Cause %08X  BadVAddr %08X  Status %08X  EPC %08X\n\n",
+    excpPrintf("      Cause %08X  BadVAddr %08X  Status %08X  EPC %08X\n\n",
                cause, badvaddr, status, epc);
 
-	for(i = 0; i < 32/4; i++) 
-	{
-		excpPrintf("       %4s: %08X %4s: %08X %4s: %08X %4s: %08X\n", 
-					regName[i],  regs[i], regName[i+8], regs[i+8],
-					regName[i+16],  regs[i+16], regName[i+24], regs[i+24]); 
-	}
-	
-	excpPrintf("\n");
-	
+    for(i = 0; i < 32/4; i++)
+    {
+        excpPrintf("       %4s: %08X %4s: %08X %4s: %08X %4s: %08X\n",
+                    regName[i],  regs[i], regName[i+8], regs[i+8],
+                    regName[i+16],  regs[i+16], regName[i+24], regs[i+24]);
+    }
 
-	
-	SleepThread();
+    excpPrintf("\n");
+
+    SleepThread();
 }
 
 
@@ -155,7 +168,7 @@ installExceptionHandlers(void)
 {
     int i;
 
-	// Skip exception #8 (syscall) & 9 (breakpoint)
+    // Skip exception #8 (syscall) & 9 (breakpoint)
     for (i = 1; i < 4; i++) {
         SetVTLBRefillHandler(i, pkoExceptionHandler);
     }
